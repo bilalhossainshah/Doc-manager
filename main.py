@@ -1,4 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI 
+from s3 import upload_to_s3
+from database import init_db
+from routers import upload 
+
+
 app = FastAPI()
+init_db()
+
+
+app.include_router(upload.router)
 @app.get("/")
 def read_root():    return {"Hello": "World"}
