@@ -215,4 +215,4 @@ __marimo__/
 
 
 .env
-chroma_db/*
+chroma_db/
