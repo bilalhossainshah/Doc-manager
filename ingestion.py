@@ -27,7 +27,9 @@ def ingest_document(file_path, user_id):
     )
     chunks = splitter.split_documents(docs)
 
-    print(f"📄 Chunks created: {len(chunks)}")
+    print(f" Chunks created: {len(chunks)}")
+    print(f" Sample chunk content: {chunks[0].page_content[:200]}...")
+    print(f" Sample chunk metadata: {chunks[0].metadata}  ")
 
     
     for i, chunk in enumerate(chunks):
