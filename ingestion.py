@@ -54,5 +54,5 @@ def ingest_document(file_path, user_id):
 
     vectordb.persist()
 
-    print("✅ Stored in ChromaDB")
+    print("Stored in ChromaDB")
 
