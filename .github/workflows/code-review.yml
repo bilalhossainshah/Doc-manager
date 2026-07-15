@@ -1,0 +1,29 @@
+name: Code Review
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install linters
+        run: pip install pylint-odoo black isort
+      - name: Run pylint-odoo
+        run: pylint --load-plugins=pylint_odoo -d all -e odoolint $(git diff --name-only origin/main...HEAD -- '*.py')
+      - name: Check formatting
+        run: black --check . && isort --check-only .
+
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Codium-ai/pr-agent-action@main
+        env:
+          OPENAI_KEY: AQ.Ab8RN6IC8s0fnvdPndRWDCF3MU1Zm1HYiQCZqKzJdnyrd3jTzQ
+          GOOGLE_AI_STUDIO_API_KEY: AQ.Ab8RN6IC8s0fnvdPndRWDCF3MU1Zm1HYiQCZqKzJdnyrd3jTzQ
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
