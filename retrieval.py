@@ -46,6 +46,9 @@ def retrieve_answer(query: str, user_id: str):
         temperature=0
     )
 
+
+
+
     
     prompt_template = """
 You are a helpful AI assistant.
@@ -60,7 +63,11 @@ Give a clear, structured, and detailed answer.
 Context:
 {context}
 
+
+
 Question: {question}
+
+
 
 Answer:
 """
@@ -83,18 +90,25 @@ Answer:
 
     return result["result"]
 
-    # Step 7: Source chunks extract karo (uncomment if needed)
-    # source_chunks = []
-    # for doc in result["source_documents"]:
-    #     source_chunks.append({
-    #         "text": doc.page_content,
-    #         "source": doc.metadata.get("source", "unknown"),
-    #         "chunk_id": doc.metadata.get("chunk_id", "unknown"),
-    #         "page": doc.metadata.get("page", "unknown")
-    #     })
 
-    # return {
-    #     "answer": result["result"],
-    #     "source_chunks": source_chunks,
-    #     "total_chunks_used": len(source_chunks)
-    # }
+    Step 7: Source chunks extract karo (uncomment if needed)
+    source_chunks = []
+    for doc in result["source_documents"]:
+        source_chunks.append({
+            "text": doc.page_content,
+            "source": doc.metadata.get("source", "unknown"),
+            "chunk_id": doc.metadata.get("chunk_id", "unknown"),
+            "page": doc.metadata.get("page", "unknown")
+        })
+
+
+
+    return {
+        "answer": result["result"],
+        "source_chunks": source_chunks,
+        "total_chunks_used": len(source_chunks)
+    }
+    def retrieve_answer(query: str, user_id: str):
+        persist_dir = f"{CHROMA_DB_DIR}/{user_id}"
+        return retrieve_answer(query, user_id)
+        
