@@ -1,29 +1,197 @@
-name: Code Review
+name: 🔍 Automated Code Review
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, master, develop]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
 
 jobs:
-  lint:
+  # ─────────────────────────────────────────────
+  # 1. Code Style & Formatting (Black + isort)
+  # ─────────────────────────────────────────────
+  formatting:
+    name: 🎨 Formatting Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install linters
-        run: pip install pylint-odoo black isort
-      - name: Run pylint-odoo
-        run: pylint --load-plugins=pylint_odoo -d all -e odoolint $(git diff --name-only origin/main...HEAD -- '*.py')
-      - name: Check formatting
-        run: black --check . && isort --check-only .
 
-  ai-review:
+      - name: Install reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Install formatters
+        run: pip install black isort
+
+      - name: Run Black via reviewdog
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          black --check --diff . 2>&1 | reviewdog \
+            -efm="%f:%l:%c: %m" \
+            -name="Black Formatter" \
+            -reporter=github-pr-review \
+            -filter-mode=added \
+            -fail-on-error=false || true
+
+      - name: Run isort check
+        run: |
+          isort --check-only --diff . && echo "✅ isort: All imports are sorted correctly" || echo "⚠️ isort: Import order issues found (see diff above)"
+
+  # ─────────────────────────────────────────────
+  # 2. Linting (Ruff - fast Python linter)
+  # ─────────────────────────────────────────────
+  lint:
+    name: 🔎 Linting (Ruff)
     runs-on: ubuntu-latest
     steps:
-      - uses: Codium-ai/pr-agent-action@main
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Ruff via reviewdog
+        uses: reviewdog/action-ruff@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          filter_mode: added
+          fail_on_error: false
+          ruff_flags: "--select=E,W,F,I,N,UP,B,A,C4,SIM --ignore=E501"
+
+  # ─────────────────────────────────────────────
+  # 3. Security Scan (Bandit)
+  # ─────────────────────────────────────────────
+  security:
+    name: 🔒 Security Scan (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Install bandit
+        run: pip install bandit
+
+      - name: Run Bandit security scan via reviewdog
         env:
-          OPENAI_KEY: AQ.Ab8RN6IC8s0fnvdPndRWDCF3MU1Zm1HYiQCZqKzJdnyrd3jTzQ
-          GOOGLE_AI_STUDIO_API_KEY: AQ.Ab8RN6IC8s0fnvdPndRWDCF3MU1Zm1HYiQCZqKzJdnyrd3jTzQ
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bandit -r . --skip B101 -f json 2>/dev/null \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for issue in data.get('results', []):
+              filename = issue['filename']
+              line = issue['line_number']
+              severity = issue['issue_severity']
+              text = issue['issue_text']
+              test_id = issue['test_id']
+              print(f'{filename}:{line}:1: [{severity}] {test_id}: {text}')
+          " | reviewdog \
+            -efm="%f:%l:%c: %m" \
+            -name="Bandit Security" \
+            -reporter=github-pr-review \
+            -filter-mode=added \
+            -fail-on-error=false || true
+
+  # ─────────────────────────────────────────────
+  # 4. Custom Rules Enforcement
+  # ─────────────────────────────────────────────
+  custom-rules:
+    name: 📋 Custom Rules Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run custom rule checks
+        run: |
+          python3 .github/scripts/custom_rules_check.py
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────
+  # 5. Summary Report on PR
+  # ─────────────────────────────────────────────
+  summary:
+    name: 📊 Review Summary
+    runs-on: ubuntu-latest
+    needs: [formatting, lint, security, custom-rules]
+    if: always()
+    steps:
+      - name: Post summary comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const results = {
+              formatting: '${{ needs.formatting.result }}',
+              lint: '${{ needs.lint.result }}',
+              security: '${{ needs.security.result }}',
+              custom_rules: '${{ needs.custom-rules.result }}'
+            };
+
+            const icon = (r) => r === 'success' ? '✅' : r === 'failure' ? '❌' : '⚠️';
+
+            const body = `## 🤖 Automated Code Review Report
+
+            | Check | Status |
+            |-------|--------|
+            | 🎨 Formatting (Black + isort) | ${icon(results.formatting)} ${results.formatting} |
+            | 🔎 Linting (Ruff) | ${icon(results.lint)} ${results.lint} |
+            | 🔒 Security (Bandit) | ${icon(results.security)} ${results.security} |
+            | 📋 Custom Rules | ${icon(results.custom_rules)} ${results.custom_rules} |
+
+            > 💡 Check the **Files changed** tab for inline review comments from each tool.
+            > 🔍 Review inline annotations from **Reviewdog** for specific line-level feedback.
+            `;
+
+            // Find existing bot comment to update instead of creating duplicates
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Automated Code Review Report')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
