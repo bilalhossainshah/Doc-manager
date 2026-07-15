@@ -59,14 +59,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Ruff via reviewdog
-        uses: reviewdog/action-ruff@v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          reporter: github-pr-review
-          filter_mode: added
-          fail_on_error: false
-          ruff_flags: "--select=E,W,F,I,N,UP,B,A,C4,SIM --ignore=E501"
+          python-version: '3.11'
+
+      - name: Install reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff via reviewdog
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ruff check --output-format=pylint . 2>&1 | reviewdog \
+            -efm="%f:%l:%c: %m" \
+            -name="Ruff Linter" \
+            -reporter=github-pr-review \
+            -filter-mode=added \
+            -fail-on-error=false || true
+          ruff check . --exit-zero
 
   # ─────────────────────────────────────────────
   # 3. Security Scan (Bandit)
