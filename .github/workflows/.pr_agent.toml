@@ -1,0 +1,9 @@
+[pr_reviewer]
+extra_instructions = """
+- Flag any direct ORM writes that bypass compute/onchange logic
+- Flag missing access rights (ir.model.access.csv) for new models
+- Flag raw SQL execution (self.env.cr.execute) without parameterized queries
+- Flag any new field without a help text
+- Check that inherited methods call super() appropriately
+"""
+require_security_review = true
