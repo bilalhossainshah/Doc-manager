@@ -216,3 +216,5 @@ __marimo__/
 
 .env
 chroma_db/
+frontend/node_modules/
+/frontend/node_modules/
