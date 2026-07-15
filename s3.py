@@ -24,3 +24,11 @@ def upload_to_s3(file_path, file_name, user_id):
     s3.upload_file(file_path, bucket_name, s3_key, ExtraArgs={"ContentType": "application/pdf"})
     return f"https://{bucket_name}.s3.amazonaws.com/{s3_key}"
 
+def download_from_s3(s3_key, local_path):
+    bucket_name = os.getenv("BUCKET_NAME")
+    if not bucket_name:
+        raise ValueError("BUCKET_NAME environment variable is not set")
+
+    s3 = get_s3_client()
+    s3.download_file(bucket_name, s3_key, local_path)
+    return local_path
