@@ -46,6 +46,9 @@ def retrieve_answer(query: str, user_id: str):
         temperature=0
     )
 
+
+
+
     
     prompt_template = """
 You are a helpful AI assistant.
@@ -60,7 +63,11 @@ Give a clear, structured, and detailed answer.
 Context:
 {context}
 
+
+
 Question: {question}
+
+
 
 Answer:
 """
@@ -81,7 +88,7 @@ Answer:
     result = qa_chain.invoke({"query": query})
     print(f"✅ Answer generated: {result['result']}")
 
-    return result["result"]
+    return {"answer": result["result"]}
 
     # Step 7: Source chunks extract karo (uncomment if needed)
     # source_chunks = []
@@ -92,9 +99,12 @@ Answer:
     #         "chunk_id": doc.metadata.get("chunk_id", "unknown"),
     #         "page": doc.metadata.get("page", "unknown")
     #     })
-
+    #
+    #
+    #
     # return {
     #     "answer": result["result"],
     #     "source_chunks": source_chunks,
     #     "total_chunks_used": len(source_chunks)
     # }
+        
