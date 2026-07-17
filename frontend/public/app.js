@@ -19,8 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             fileNameDisplay.textContent = 'Drag and drop or click to browse';
             fileNameDisplay.classList.remove('text-blue-400');
-        }
-    });
+        
 
     // Handle File Upload
     uploadForm.addEventListener('submit', async (e) => {
