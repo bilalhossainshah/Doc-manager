@@ -1,12 +1,13 @@
+import logging
+import os
+from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_classic.chains import RetrievalQA
 from langchain_classic.prompts import PromptTemplate
 
-import os
-from dotenv import load_dotenv
-
+logger = logging.getLogger(__name__)
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -46,10 +47,6 @@ def retrieve_answer(query: str, user_id: str):
         temperature=0
     )
 
-
-
-
-    
     prompt_template = """
 You are a helpful AI assistant.
 
@@ -63,11 +60,7 @@ Give a clear, structured, and detailed answer.
 Context:
 {context}
 
-
-
 Question: {question}
-
-
 
 Answer:
 """
@@ -77,7 +70,6 @@ Answer:
         template=prompt_template
     )
 
-   
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         retriever=retriever,
@@ -86,7 +78,7 @@ Answer:
     )
 
     result = qa_chain.invoke({"query": query})
-    print(f"✅ Answer generated: {result['result']}")
+    logger.info("Answer generated: %s", result['result'])
 
     return {"answer": result["result"]}
 

@@ -4,10 +4,11 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(PORT, () => {
+
+
+
   console.log(`Frontend server is running on http://localhost:${PORT}`);
 });
