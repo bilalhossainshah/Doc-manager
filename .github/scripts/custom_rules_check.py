@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-EXCLUDE_DIRS = {".git", "__pycache__", ".venv", "venv", "env", "node_modules", "uploads", ".github"}
+EXCLUDE_DIRS = {".git", "__pycache__", ".venv", "venv", "env", "node_modules", "uploads", ".github", "chroma_db", "dist", "build"}
 EXCLUDE_FILES = {"madal.py"}  # intentionally excluded files
 MAX_FILE_LINES = 300
 
@@ -72,15 +72,14 @@ def log_issue(filepath, line_no, rule_id, message, lines=None, severity="ERROR")
 
 
 def get_python_files():
-    """Collect all .py files in the project."""
-    root = Path(".")
+    """Collect all .py files in the project efficiently without traversing excluded dirs."""
     files = []
-    for path in root.rglob("*.py"):
-        if any(part in EXCLUDE_DIRS for part in path.parts):
-            continue
-        if path.name in EXCLUDE_FILES:
-            continue
-        files.append(path)
+    for root_dir, dirs, filenames in os.walk("."):
+        # Prune excluded directories in-place so os.walk does NOT enter them
+        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith(".")]
+        for filename in filenames:
+            if filename.endswith(".py") and filename not in EXCLUDE_FILES:
+                files.append(Path(root_dir) / filename)
     return files
 
 
@@ -199,6 +198,11 @@ def check_os_system(filepath, tree, lines):
 
 def print_entry(entry):
     severity_icon = "❌ ERROR" if entry['severity'] == "ERROR" else "⚠️ WARNING"
+    
+    # Machine-readable format for Reviewdog / Linters (file:line:col: message)
+    print(f"{entry['file']}:{entry['line']}:1: [{entry['rule']}] [{entry['severity']}] {entry['message']}")
+
+    # Human-readable CLI snippet
     print(f"  📌 File:     {entry['file']}")
     print(f"  📍 Line:     {entry['line']}")
     print(f"  🚨 Message:  [{entry['rule']}] {entry['message']} ({severity_icon})")
@@ -210,7 +214,7 @@ def print_entry(entry):
         print("  └" + "─" * 58)
     print()
 
-    # If running inside GitHub Actions workflow, output GitHub workflow annotation
+    # Output GitHub workflow annotation for native GitHub Actions UI
     if os.getenv("GITHUB_ACTIONS") == "true":
         cmd = "error" if entry['severity'] == "ERROR" else "warning"
         print(f"::{cmd} file={entry['file']},line={entry['line']}::[{entry['rule']}] {entry['message']}")

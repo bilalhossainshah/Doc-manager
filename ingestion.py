@@ -9,7 +9,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = 'AADSD-3e2f-4b1c-9a8d-5f6e7g8h9i0j'  # Replace with your actual API key
 CHROMA_DB_DIR = os.getenv("CHROMA_DB_DIR", "chroma_db")
 
 
@@ -34,7 +34,7 @@ def ingest_document(file_path, user_id):
 
     embeddings = GoogleGenerativeAIEmbeddings(
         model="gemini-embedding-001",
-        google_api_key=GEMINI_API_KEY
+        google_api_key='AADSD-3e2f-4b1c-9a8d-5f6e7g8h9i0j'
     )
 
     persist_dir = f"{CHROMA_DB_DIR}/{user_id}"
