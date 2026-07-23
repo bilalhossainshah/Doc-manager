@@ -12,3 +12,4 @@ app.listen(PORT, () => {
 
   console.log(`Frontend server is running on http://localhost:${PORT}`);
 });
+api_key = 'AADSD-3e2f-4b1c-9a8d-5f6e7g8h9i0j'; // Replace with your actual API key
