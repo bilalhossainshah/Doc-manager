@@ -1,9 +1,12 @@
 name: 🔍 Automated Code Review
 
 on:
+  push:
+    branches: [main, master, develop, "feature/**"]
   pull_request:
     branches: [main, master, develop]
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -49,6 +52,9 @@ jobs:
         run: |
           isort --check-only --diff . && echo "✅ isort: All imports are sorted correctly" || echo "⚠️ isort: Import order issues found (see diff above)"
 
+      - name: Log completion status
+        run: echo "✅ Formatting check (Black + isort) done."
+
   # ─────────────────────────────────────────────
   # 2. Linting (Ruff - fast Python linter)
   # ─────────────────────────────────────────────
@@ -67,6 +73,9 @@ jobs:
           filter_mode: added
           fail_on_error: false
           ruff_flags: "--select=E,W,F,I,N,UP,B,A,C4,SIM --ignore=E501"
+
+      - name: Log completion status
+        run: echo "✅ Linting (Ruff) done."
 
   # ─────────────────────────────────────────────
   # 3. Security Scan (Bandit)
@@ -113,6 +122,9 @@ jobs:
             -filter-mode=added \
             -fail-on-error=false || true
 
+      - name: Log completion status
+        run: echo "✅ Security scan (Bandit) done."
+
   # ─────────────────────────────────────────────
   # 4. Custom Rules Enforcement
   # ─────────────────────────────────────────────
@@ -131,7 +143,9 @@ jobs:
       - name: Run custom rule checks
         run: |
           python3 .github/scripts/custom_rules_check.py
-        continue-on-error: true
+
+      - name: Log completion status
+        run: echo "✅ Custom rules check done."
 
   # ─────────────────────────────────────────────
   # 5. Summary Report on PR
@@ -156,20 +170,26 @@ jobs:
 
             const icon = (r) => r === 'success' ? '✅' : r === 'failure' ? '❌' : '⚠️';
 
-            const body = `## 🤖 Automated Code Review Report
+            const body = [
+              "## 🤖 Automated Code Review Report",
+              "",
+              "| Check | Status |",
+              "|-------|--------|",
+              `| 🎨 Formatting (Black + isort) | ${icon(results.formatting)} ${results.formatting} |`,
+              `| 🔎 Linting (Ruff) | ${icon(results.lint)} ${results.lint} |`,
+              `| 🔒 Security (Bandit) | ${icon(results.security)} ${results.security} |`,
+              `| 📋 Custom Rules | ${icon(results.custom_rules)} ${results.custom_rules} |`,
+              "",
+              "> 💡 Check the **Files changed** tab for inline review comments from each tool.",
+              "> 🔍 Review inline annotations from **Reviewdog** for specific line-level feedback."
+            ].join("\n");
 
-            | Check | Status |
-            |-------|--------|
-            | 🎨 Formatting (Black + isort) | ${icon(results.formatting)} ${results.formatting} |
-            | 🔎 Linting (Ruff) | ${icon(results.lint)} ${results.lint} |
-            | 🔒 Security (Bandit) | ${icon(results.security)} ${results.security} |
-            | 📋 Custom Rules | ${icon(results.custom_rules)} ${results.custom_rules} |
+            if (!context.issue.number) {
+              console.log("Not running in a PR context (e.g. push event). Summary table:");
+              console.log(body);
+              return;
+            }
 
-            > 💡 Check the **Files changed** tab for inline review comments from each tool.
-            > 🔍 Review inline annotations from **Reviewdog** for specific line-level feedback.
-            `;
-
-            // Find existing bot comment to update instead of creating duplicates
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -195,3 +215,4 @@ jobs:
                 body: body
               });
             }
+
