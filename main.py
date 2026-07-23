@@ -21,4 +21,6 @@ init_db()
 app.include_router(upload.router)
 app.include_router(query.router)
 @app.get("/")
-def read_root():    return {"Hello": "World"}
+def read_root():
+    """Root health check endpoint."""
+    return {"Hello": "World"}
