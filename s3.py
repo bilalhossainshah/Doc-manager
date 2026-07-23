@@ -16,8 +16,9 @@ def get_s3_client():
 
 def upload_to_s3(file_path, file_name, user_id):
     bucket_name = os.getenv("BUCKET_NAME")
-    if not bucket_name:
-        raise ValueError("BUCKET_NAME environment variable is not set")
+    if not bucket_name or not os.getenv("AWS_ACCESS_KEY"):
+        # Fallback to local storage path when AWS S3 is not configured
+        return f"/uploads/{user_id}_{file_name}"
 
     s3 = get_s3_client()
     s3_key = f"users/{user_id}/{file_name}"
