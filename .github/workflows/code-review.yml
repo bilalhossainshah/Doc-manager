@@ -41,10 +41,11 @@ jobs:
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          REPORTER=$([[ "${{ github.event_name }}" == "pull_request" ]] && echo "github-pr-review" || echo "github-check")
           black --check --diff . 2>&1 | reviewdog \
             -efm="%f:%l:%c: %m" \
             -name="Black Formatter" \
-            -reporter=github-pr-review \
+            -reporter=$REPORTER \
             -filter-mode=nofilter \
             -fail-on-error=false || true
 
@@ -69,7 +70,7 @@ jobs:
         uses: reviewdog/action-ruff@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          reporter: github-pr-review
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
           filter_mode: nofilter
           fail_on_error: false
           ruff_flags: "--select=E,W,F,I,N,UP,B,A,C4,SIM --ignore=E501"
@@ -104,6 +105,7 @@ jobs:
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          REPORTER=$([[ "${{ github.event_name }}" == "pull_request" ]] && echo "github-pr-review" || echo "github-check")
           bandit -r . --skip B101 -f json 2>/dev/null \
             | python3 -c "
           import sys, json
@@ -118,7 +120,7 @@ jobs:
           " | reviewdog \
             -efm="%f:%l:%c: %m" \
             -name="Bandit Security" \
-            -reporter=github-pr-review \
+            -reporter=$REPORTER \
             -filter-mode=nofilter \
             -fail-on-error=false || true
 
@@ -149,10 +151,11 @@ jobs:
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          REPORTER=$([[ "${{ github.event_name }}" == "pull_request" ]] && echo "github-pr-review" || echo "github-check")
           python3 .github/scripts/custom_rules_check.py 2>&1 | reviewdog \
             -efm="%f:%l:%c: %m" \
             -name="Custom Rules" \
-            -reporter=github-pr-review \
+            -reporter=$REPORTER \
             -filter-mode=nofilter \
             -fail-on-error=false || true
 
@@ -160,7 +163,7 @@ jobs:
         run: echo "✅ Custom rules check done."
 
   # ─────────────────────────────────────────────
-  # 5. Summary Report on PR
+  # 5. Summary Report (Job Summary + PR comment)
   # ─────────────────────────────────────────────
   summary:
     name: 📊 Review Summary
@@ -168,7 +171,30 @@ jobs:
     needs: [formatting, lint, security, custom-rules]
     if: always()
     steps:
-      - name: Post summary comment
+      # Always runs — visible in the Actions tab for every push AND pull request
+      - name: Write GitHub Actions Job Summary
+        run: |
+          icon() { [ "$1" = "success" ] && echo "✅" || ([ "$1" = "failure" ] && echo "❌" || echo "⚠️"); }
+          cat >> $GITHUB_STEP_SUMMARY <<'SUMMARY'
+          ## 🤖 Automated Code Review Report
+
+          **Triggered by:** `${{ github.event_name }}` on branch `${{ github.ref_name }}`
+          **Commit:** `${{ github.sha }}`
+
+          | Check | Status |
+          |-------|--------|
+          | 🎨 Formatting (Black + isort) | ${{ needs.formatting.result }} |
+          | 🔎 Linting (Ruff) | ${{ needs.lint.result }} |
+          | 🔒 Security (Bandit) | ${{ needs.security.result }} |
+          | 📋 Custom Rules | ${{ needs.custom-rules.result }} |
+
+          > 💡 Check the **Checks** tab for inline annotations from each tool.
+          > 🔍 Review inline annotations from **Reviewdog** for specific line-level feedback.
+          SUMMARY
+
+      # Only runs on pull requests — posts/updates a PR comment
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -185,6 +211,9 @@ jobs:
             const body = [
               "## 🤖 Automated Code Review Report",
               "",
+              `**Triggered by:** \`${{ github.event_name }}\` on branch \`${{ github.ref_name }}\``,
+              `**Commit:** \`${{ github.sha }}\``,
+              "",
               "| Check | Status |",
               "|-------|--------|",
               `| 🎨 Formatting (Black + isort) | ${icon(results.formatting)} ${results.formatting} |`,
@@ -195,12 +224,6 @@ jobs:
               "> 💡 Check the **Files changed** tab for inline review comments from each tool.",
               "> 🔍 Review inline annotations from **Reviewdog** for specific line-level feedback."
             ].join("\n");
-
-            if (!context.issue.number) {
-              console.log("Not running in a PR context (e.g. push event). Summary table:");
-              console.log(body);
-              return;
-            }
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -227,4 +250,3 @@ jobs:
                 body: body
               });
             }
-

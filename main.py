@@ -24,3 +24,7 @@ app.include_router(query.router)
 def read_root():
     """Root health check endpoint."""
     return {"Hello": "World"}
+def main():
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
