@@ -190,12 +190,11 @@ ruff check --fix .    # auto-fix what's possible
 This is a **project-specific rule engine** tailored to the Doc-Manager codebase.
 
 **How it works:**
-1. Scans all `.py` files in the project (excluding `.venv`, `uploads`, etc.)
+1. Scans all `.py` files in the project (excluding `.venv`, `uploads`, `.github`, etc.)
 2. Runs **text-based checks** (regex on raw source)
 3. Runs **AST-based checks** (parses Python syntax tree for deeper analysis)
-4. Reports `ERRORS` (blocking) and `WARNINGS` (informational)
-
-See the [Custom Rules Reference](#custom-rules-reference) section for full details.
+4. Reports `ERRORS` (blocking) and `WARNINGS` (informational) featuring **exact file paths, line numbers, and formatted code snippets** with line indicators
+5. Outputs native **GitHub Workflow Annotations** (`::error` / `::warning`) so issues are highlighted directly on PR lines in GitHub
 
 ---
 

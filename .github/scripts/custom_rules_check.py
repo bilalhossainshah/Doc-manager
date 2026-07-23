@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-EXCLUDE_DIRS = {".git", "__pycache__", ".venv", "venv", "env", "node_modules", "uploads"}
+EXCLUDE_DIRS = {".git", "__pycache__", ".venv", "venv", "env", "node_modules", "uploads", ".github"}
 EXCLUDE_FILES = {"madal.py"}  # intentionally excluded files
 MAX_FILE_LINES = 300
 
@@ -42,13 +42,28 @@ issues = []
 warnings = []
 
 
-def log_issue(filepath, line_no, rule_id, message, severity="ERROR"):
+def get_code_snippet(lines, line_no, context=1):
+    """Extract code snippet around line_no with context lines and line numbers."""
+    if not lines or line_no < 1 or line_no > len(lines):
+        return ""
+    start = max(1, line_no - context)
+    end = min(len(lines), line_no + context)
+    snippet_lines = []
+    for idx in range(start, end + 1):
+        prefix = " > " if idx == line_no else "   "
+        snippet_lines.append(f"{prefix}{idx:4d} | {lines[idx - 1]}")
+    return "\n".join(snippet_lines)
+
+
+def log_issue(filepath, line_no, rule_id, message, lines=None, severity="ERROR"):
+    code_snippet = get_code_snippet(lines, line_no) if lines else ""
     entry = {
         "file": filepath,
         "line": line_no,
         "rule": rule_id,
         "message": message,
         "severity": severity,
+        "code_snippet": code_snippet,
     }
     if severity == "WARNING":
         warnings.append(entry)
@@ -74,24 +89,24 @@ def get_python_files():
 def check_hardcoded_secrets(filepath, lines):
     """Rule 1: No hardcoded secrets."""
     for i, line in enumerate(lines, 1):
-        # Skip comments and env-var assignments
         stripped = line.strip()
         if stripped.startswith("#"):
             continue
         for pattern, message in SECRET_PATTERNS:
             if re.search(pattern, line):
-                log_issue(filepath, i, "R001", message)
+                log_issue(filepath, i, "R001", message, lines=lines)
 
 
-def check_bare_except(filepath, tree):
+def check_bare_except(filepath, tree, lines):
     """Rule 2: No bare except clauses."""
     for node in ast.walk(tree):
         if isinstance(node, ast.ExceptHandler) and node.type is None:
             log_issue(filepath, node.lineno, "R002",
-                      "Bare 'except:' used. Catch a specific exception instead.")
+                      "Bare 'except:' used. Catch a specific exception instead.",
+                      lines=lines)
 
 
-def check_print_statements(filepath, tree):
+def check_print_statements(filepath, tree, lines):
     """Rule 3: No print() in production code."""
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
@@ -99,17 +114,16 @@ def check_print_statements(filepath, tree):
             if isinstance(func, ast.Name) and func.id == "print":
                 log_issue(filepath, node.lineno, "R003",
                           "print() found. Use logging module instead.",
-                          severity="WARNING")
+                          lines=lines, severity="WARNING")
 
 
-def check_fastapi_docstrings(filepath, tree):
+def check_fastapi_docstrings(filepath, tree, lines):
     """Rule 4: FastAPI route functions must have docstrings."""
     route_decorators = {"get", "post", "put", "delete", "patch"}
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for decorator in node.decorator_list:
-            # Check for @router.get / @app.post etc.
             is_route = False
             if isinstance(decorator, ast.Attribute) and decorator.attr in route_decorators:
                 is_route = True
@@ -124,7 +138,7 @@ def check_fastapi_docstrings(filepath, tree):
                         isinstance(body[0].value.value, str)):
                     log_issue(filepath, node.lineno, "R004",
                               f"FastAPI route '{node.name}' is missing a docstring.",
-                              severity="WARNING")
+                              lines=lines, severity="WARNING")
 
 
 def check_todo_fixme(filepath, lines):
@@ -134,20 +148,20 @@ def check_todo_fixme(filepath, lines):
         if pattern.search(line):
             log_issue(filepath, i, "R005",
                       f"'{pattern.search(line).group()}' comment found. Track this as a GitHub Issue.",
-                      severity="WARNING")
+                      lines=lines, severity="WARNING")
 
 
 def check_fstring_sql(filepath, lines):
     """Rule 6: No f-string SQL queries."""
-    sql_keywords = re.compile(r'\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE)\b', re.IGNORECASE)
     fstring_pattern = re.compile(r'f["\'].*?\b(SELECT|INSERT|UPDATE|DELETE)\b', re.IGNORECASE)
     for i, line in enumerate(lines, 1):
         if fstring_pattern.search(line):
             log_issue(filepath, i, "R006",
-                      "f-string used in SQL query. Use parameterized queries to prevent SQL injection.")
+                      "f-string used in SQL query. Use parameterized queries to prevent SQL injection.",
+                      lines=lines)
 
 
-def check_snake_case(filepath, tree):
+def check_snake_case(filepath, tree, lines):
     """Rule 8: Function names must be snake_case."""
     camel_pattern = re.compile(r'^[a-z]+([A-Z][a-z]+)+')
     for node in ast.walk(tree):
@@ -156,18 +170,18 @@ def check_snake_case(filepath, tree):
             if camel_pattern.match(name):
                 log_issue(filepath, node.lineno, "R008",
                           f"Function '{name}' uses camelCase. Use snake_case instead.",
-                          severity="WARNING")
+                          lines=lines, severity="WARNING")
 
 
 def check_file_length(filepath, lines):
     """Rule 9: Files should not exceed MAX_FILE_LINES lines."""
     if len(lines) > MAX_FILE_LINES:
-        log_issue(filepath, MAX_FILE_LINES, "R009",
+        log_issue(filepath, len(lines), "R009",
                   f"File has {len(lines)} lines (limit: {MAX_FILE_LINES}). Consider splitting into modules.",
-                  severity="WARNING")
+                  lines=lines, severity="WARNING")
 
 
-def check_os_system(filepath, tree):
+def check_os_system(filepath, tree, lines):
     """Rule 10: No os.system() calls."""
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
@@ -177,10 +191,30 @@ def check_os_system(filepath, tree):
                     isinstance(func.value, ast.Name) and
                     func.value.id == "os"):
                 log_issue(filepath, node.lineno, "R010",
-                          "os.system() used. Use subprocess.run() instead for better security and control.")
+                          "os.system() used. Use subprocess.run() instead for better security and control.",
+                          lines=lines)
 
 
 # ── Main Runner ─────────────────────────────────────────────────────────────────
+
+def print_entry(entry):
+    severity_icon = "❌ ERROR" if entry['severity'] == "ERROR" else "⚠️ WARNING"
+    print(f"  📌 File:     {entry['file']}")
+    print(f"  📍 Line:     {entry['line']}")
+    print(f"  🚨 Message:  [{entry['rule']}] {entry['message']} ({severity_icon})")
+    if entry['code_snippet']:
+        print("  💻 Code:")
+        print("  ┌" + "─" * 58)
+        for s_line in entry['code_snippet'].splitlines():
+            print(f"  │ {s_line}")
+        print("  └" + "─" * 58)
+    print()
+
+    # If running inside GitHub Actions workflow, output GitHub workflow annotation
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        cmd = "error" if entry['severity'] == "ERROR" else "warning"
+        print(f"::{cmd} file={entry['file']},line={entry['line']}::[{entry['rule']}] {entry['message']}")
+
 
 def main():
     py_files = get_python_files()
@@ -211,36 +245,40 @@ def main():
             tree = ast.parse(source, filename=rel_path)
         except SyntaxError as e:
             log_issue(rel_path, e.lineno or 1, "R000",
-                      f"Syntax error: {e.msg}")
+                      f"Syntax error: {e.msg}", lines=lines)
             continue
 
-        check_bare_except(rel_path, tree)
-        check_print_statements(rel_path, tree)
-        check_fastapi_docstrings(rel_path, tree)
-        check_snake_case(rel_path, tree)
-        check_os_system(rel_path, tree)
+        check_bare_except(rel_path, tree, lines)
+        check_print_statements(rel_path, tree, lines)
+        check_fastapi_docstrings(rel_path, tree, lines)
+        check_snake_case(rel_path, tree, lines)
+        check_os_system(rel_path, tree, lines)
 
     # ── Report ──────────────────────────────────────────────────────────────────
-    print("=" * 60)
-    print("📋 CUSTOM CODE REVIEW RESULTS")
-    print("=" * 60)
+    print("=" * 64)
+    print("📋 CUSTOM CODE REVIEW RESULTS (DETAILED CODE ANNOTATIONS)")
+    print("=" * 64)
+    print()
 
     if warnings:
-        print(f"\n⚠️  WARNINGS ({len(warnings)}):")
+        print(f"⚠️  WARNINGS ({len(warnings)}):\n")
         for w in warnings:
-            print(f"  [{w['rule']}] {w['file']}:{w['line']} — {w['message']}")
+            print_entry(w)
 
     if issues:
-        print(f"\n❌ ERRORS ({len(issues)}):")
+        print(f"❌ ERRORS ({len(issues)}):\n")
         for issue in issues:
-            print(f"  [{issue['rule']}] {issue['file']}:{issue['line']} — {issue['message']}")
-        print(f"\n❌ Found {len(issues)} error(s) and {len(warnings)} warning(s).")
+            print_entry(issue)
+        print("=" * 64)
+        print(f"❌ Found {len(issues)} error(s) and {len(warnings)} warning(s).")
         print("   Fix all errors before merging. Warnings are informational.\n")
         sys.exit(1)
     else:
-        print(f"\n✅ All custom rules passed! ({len(warnings)} warning(s))\n")
+        print("=" * 64)
+        print(f"✅ All custom rules passed! ({len(warnings)} warning(s))\n")
         sys.exit(0)
 
 
 if __name__ == "__main__":
     main()
+
