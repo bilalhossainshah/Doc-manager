@@ -198,6 +198,11 @@ def check_os_system(filepath, tree, lines):
 
 def print_entry(entry):
     severity_icon = "❌ ERROR" if entry['severity'] == "ERROR" else "⚠️ WARNING"
+    
+    # Machine-readable format for Reviewdog / Linters (file:line:col: message)
+    print(f"{entry['file']}:{entry['line']}:1: [{entry['rule']}] [{entry['severity']}] {entry['message']}")
+
+    # Human-readable CLI snippet
     print(f"  📌 File:     {entry['file']}")
     print(f"  📍 Line:     {entry['line']}")
     print(f"  🚨 Message:  [{entry['rule']}] {entry['message']} ({severity_icon})")
@@ -209,7 +214,7 @@ def print_entry(entry):
         print("  └" + "─" * 58)
     print()
 
-    # If running inside GitHub Actions workflow, output GitHub workflow annotation
+    # Output GitHub workflow annotation for native GitHub Actions UI
     if os.getenv("GITHUB_ACTIONS") == "true":
         cmd = "error" if entry['severity'] == "ERROR" else "warning"
         print(f"::{cmd} file={entry['file']},line={entry['line']}::[{entry['rule']}] {entry['message']}")

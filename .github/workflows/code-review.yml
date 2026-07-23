@@ -45,7 +45,7 @@ jobs:
             -efm="%f:%l:%c: %m" \
             -name="Black Formatter" \
             -reporter=github-pr-review \
-            -filter-mode=added \
+            -filter-mode=nofilter \
             -fail-on-error=false || true
 
       - name: Run isort check
@@ -70,7 +70,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
-          filter_mode: added
+          filter_mode: nofilter
           fail_on_error: false
           ruff_flags: "--select=E,W,F,I,N,UP,B,A,C4,SIM --ignore=E501"
 
@@ -119,7 +119,7 @@ jobs:
             -efm="%f:%l:%c: %m" \
             -name="Bandit Security" \
             -reporter=github-pr-review \
-            -filter-mode=added \
+            -filter-mode=nofilter \
             -fail-on-error=false || true
 
       - name: Log completion status
@@ -140,9 +140,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run custom rule checks
+      - name: Install reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Run custom rule checks via reviewdog
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 .github/scripts/custom_rules_check.py
+          python3 .github/scripts/custom_rules_check.py 2>&1 | reviewdog \
+            -efm="%f:%l:%c: %m" \
+            -name="Custom Rules" \
+            -reporter=github-pr-review \
+            -filter-mode=nofilter \
+            -fail-on-error=false || true
 
       - name: Log completion status
         run: echo "✅ Custom rules check done."
